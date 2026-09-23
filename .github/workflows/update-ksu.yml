@@ -1,0 +1,47 @@
+name: Update KernelSU-Next
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout kernel
+      uses: actions/checkout@v4
+      with:
+        ref: 23.2
+        fetch-depth: 1
+
+    - name: Remove old KSU driver
+      run: |
+        rm -rf drivers/kernelsu
+        sed -i '/kernelsu/d' drivers/Makefile
+        sed -i '/drivers\/kernelsu\/Kconfig/d' drivers/Kconfig
+
+    - name: Integrate KernelSU-Next v3.4.0
+      run: |
+        git clone --depth 1 --branch v3.4.0 https://github.com/KernelSU-Next/KernelSU-Next.git ksu-src
+        ln -s "$(realpath ksu-src/kernel)" drivers/kernelsu
+        grep -q "kernelsu" drivers/Makefile || printf '
+obj-$(CONFIG_KSU) += kernelsu/
+' >> drivers/Makefile
+        sed -i '/endmenu/i\source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+
+    - name: Enable KSU configs
+      run: |
+        # remove stale KSU/SUSFS config from defconfig
+        sed -i '/CONFIG_KSU/d; /CONFIG_KSU_SUSFS/d; /SUSFS/d' arch/arm64/configs/sweet_defconfig
+        cat >> arch/arm64/configs/sweet_defconfig <<'EOF'
+        CONFIG_KSU=y
+        EOF
+
+    - name: Commit & push
+      run: |
+        git config user.name "hrihq"
+        git config user.email "hrihq@users.noreply.github.com"
+        git add -A
+        git commit -m "KernelSU-Next: integrate v3.4.0 (replace legacy driver)" || echo "nothing to commit"
+        git push
