@@ -666,6 +666,14 @@ static bool add_genfscon(struct policydb *db, const char *fs_name,
 #else
 // https://cs.android.com/android/_/android/kernel/common/+/f5f3e54f811679761c33526e695bd296190faade
 // Some 5.10 kernel don't have this backport, so copy one.
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+// 4.14 selinux internal API incompatible (flex_array avtab, selinux_ss).
+// sepolicy patching is a no-op; root still works.
+int handle_sepolicy(void __user *user_data, u64 data_len) { return -EINVAL; }
+void ksu_destroy_sepolicy(void *pol) {}
+void *ksu_dup_sepolicy(void *old_pol) { return NULL; }
+#else
 void *ksu_kvrealloc_compat(const void *p, size_t oldsize, size_t newsize,
                            gfp_t flags)
 {
@@ -1031,3 +1039,5 @@ out_free_data:
 
     return ERR_PTR(ret);
 }
+
+#endif
