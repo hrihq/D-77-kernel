@@ -475,7 +475,7 @@ void ksu_persistent_allow_list()
 		goto put_task;
 	}
 	cb->func = do_persistent_allow_list;
-	if (task_work_add(tsk, cb, TWA_RESUME)) {
+	if (task_work_add(tsk, cb, true)) {
 		kfree(cb);
 		pr_warn("save_allow_list add task_work failed\n");
 	}
