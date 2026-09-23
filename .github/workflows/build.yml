@@ -259,36 +259,26 @@ jobs:
       with:
         name: D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}
         path: D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}.zip
-    - name: 📦 Publish Release & Notify
+
+    - name: 📦 Publish Release
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
       run: |
         TAG="D-77-$(TZ=Asia/Jakarta date '+%Y%m%d-%H%M%S')"
-        NOTES="## D-77 Kernel - Redmi Note 12 Pro 4G (sweet_k6a)
-
-"
-        NOTES="${NOTES}- Build type: ${{ github.event.inputs.build_type }}
-"
-        NOTES="${NOTES}- Compiler: ${{ github.event.inputs.compiler }}
-"
-        NOTES="${NOTES}- Kernel: 4.14.357
-"
-        NOTES="${NOTES}- KernelSU-Next (legacy, non-GKI syscall table hook)
-"
-        NOTES="${NOTES}- Build date: ${BUILD_DATE}
-
-"
-        NOTES="${NOTES}Device: sweet / sweet_k6a / sweet2
-
-"
-        NOTES="${NOTES}### Credits
-"
-        NOTES="${NOTES}- Base kernel: @MiDoNaSR
-"
-        NOTES="${NOTES}- KernelSU-Next: KernelSU-Next Team
-"
-        NOTES="${NOTES}- Maintainer: @hrihq"
-
-        gh release create "$TAG" "D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}.zip" --repo hrihq/D-77-kernel --title "D-77 Kernel ${BUILD_DATE}" --notes "$NOTES"
-
-        
+        {
+          echo "## D-77 Kernel - Redmi Note 12 Pro 4G (sweet_k6a)"
+          echo ""
+          echo "- Build type: ${{ github.event.inputs.build_type }}"
+          echo "- Compiler: ${{ github.event.inputs.compiler }}"
+          echo "- Kernel: 4.14.357"
+          echo "- KernelSU-Next (legacy, non-GKI syscall table hook)"
+          echo "- Build date: ${BUILD_DATE}"
+          echo ""
+          echo "Device: sweet / sweet_k6a / sweet2"
+          echo ""
+          echo "### Credits"
+          echo "- Base kernel: @MiDoNaSR"
+          echo "- KernelSU-Next: KernelSU-Next Team"
+          echo "- Maintainer: @hrihq"
+        } > /tmp/notes.md
+        gh release create "$TAG" "D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}.zip" --repo hrihq/D-77-kernel --title "D-77 Kernel ${BUILD_DATE}" --notes-file /tmp/notes.md
