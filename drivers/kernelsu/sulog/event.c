@@ -2,18 +2,23 @@
 #include <linux/compat.h>
 #include <linux/cred.h>
 #include <linux/gfp.h>
-#include <linux/minmax.h>
+#include <linux/kernel.h>
 #include <linux/overflow.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/signal.h>
+#endif
+
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
 
-#include <linux/version.h>
+// untagged_addr is a macro in mm.h on x86 before 6.2
 #if defined(__x86_64__) && LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)
 #include <linux/mm.h>
 #endif
 
+#include "compat/kernel_compat.h"
 #include "feature/sulog.h"
 #include "infra/event_queue.h"
 #include "klog.h" // IWYU pragma: keep
@@ -56,7 +61,11 @@ void ksu_compat_sulog(uint8_t sym)
     unsigned int uid = current_uid().val;
     struct timespec64 ts;
 
-    ktime_get_boottime_ts64(&ts);
+#if KERNEL_VERSION(4, 19, 0) <= LINUX_VERSION_CODE
+	ktime_get_boottime_ts64(&ts);
+#else
+	get_monotonic_boottime(&ts);
+#endif
     entry.s_time = (uint32_t)ts.tv_sec;
     entry.data = (uint32_t)uid;
     memcpy((void *)&entry.data + 3, &sym, 1);
@@ -87,7 +96,11 @@ int ksu_sulog_handle_compat_dump(void __user *uptr)
     if (!sbuf.index_ptr || !sbuf.buf_ptr || !sbuf.uptime_ptr)
         return 1;
 
-    ktime_get_boottime_ts64(&ts);
+#if KERNEL_VERSION(4, 19, 0) <= LINUX_VERSION_CODE
+	ktime_get_boottime_ts64(&ts);
+#else
+	get_monotonic_boottime(&ts);
+#endif
     uptime = (uint32_t)ts.tv_sec;
     if (copy_to_user((void __user *)(uintptr_t)sbuf.uptime_ptr, &uptime, sizeof(uptime)))
         return 1;

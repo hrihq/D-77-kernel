@@ -1,4 +1,3 @@
-#include "util.h"
 #include <linux/err.h>
 #include <linux/fs.h>
 #include <linux/gfp.h>
@@ -19,8 +18,9 @@
 #include <linux/hex.h>
 #endif
 
-#include "manager/apk_sign.h"
-#include "uapi/app_profile.h"
+#include "apk_sign.h"
+#include "policy/app_profile.h"
+#include "compat/kernel_compat.h"
 #include "klog.h" // IWYU pragma: keep
 
 struct sdesc {
@@ -80,7 +80,7 @@ static bool read_exact(struct file *fp, void *buffer, size_t size, loff_t *pos, 
 	if (*pos < 0 || *pos > end || size > (size_t)(end - *pos))
 		return false;
 
-	return kernel_read(fp, buffer, size, pos) == (ssize_t)size;
+	return ksu_kernel_read_compat(fp, buffer, size, pos) == (ssize_t)size;
 }
 
 static bool read_length_prefixed_end(struct file *fp, loff_t *pos, loff_t container_end, loff_t *value_end)
@@ -157,35 +157,71 @@ static __always_inline bool check_v2_signature(char *path,
 
 	bool v2_signing_valid = false;
 	int v2_signing_blocks = 0;
+	bool v3_signing_exist = false;
+	bool v3_1_signing_exist = false;
 
-	int i;
-	struct file *fp = ksu_filp_open_nonotify(path, O_RDONLY | O_NOATIME);
+	struct file *fp = ksu_filp_open_compat(path, O_RDONLY, 0);
 	if (IS_ERR(fp)) {
 		pr_err("open %s error.\n", path);
 		return false;
 	}
+
+	// disable inotify for this file
+	fp->f_mode |= FMODE_NONOTIFY;
 
 	file_size = generic_file_llseek(fp, 0, SEEK_END);
 	if (file_size < 0)
 		goto clean;
 
 	// https://en.wikipedia.org/wiki/Zip_(file_format)#End_of_central_directory_record_(EOCD)
-	for (i = 0;; ++i) {
-		unsigned short comment_size;
-		u32 magic;
-		pos = file_size - i - 2;
-		if (!read_exact(fp, &comment_size, sizeof(comment_size), &pos, file_size))
+	// Buffered backward search (single read) instead of the upstream
+	// byte-by-byte loop: scanning /data/app at boot with thousands of
+	// 2-byte kernel_read() calls stalls the device for ages.
+	{
+		unsigned char *eocd_buffer;
+		long search_size;
+		long max_comment_size = 0xffff;
+		long eocd_min_size = 22;
+		bool eocd_found = false;
+
+		search_size = max_comment_size + eocd_min_size;
+		if (search_size > file_size)
+			search_size = file_size;
+
+		eocd_buffer = kvmalloc(search_size, GFP_KERNEL);
+		if (!eocd_buffer) {
+			pr_err("error: cannot allocate memory for eocd\n");
 			goto clean;
-		if (comment_size == i) {
-			pos -= 22;
-			if (!read_exact(fp, &magic, sizeof(magic), &pos, file_size))
-				goto clean;
-			if (magic == 0x06054b50) {
-				eocd_offset = pos - sizeof(magic);
-				break;
+		}
+
+		pos = file_size - search_size;
+		ksu_kernel_read_compat(fp, eocd_buffer, search_size, &pos);
+
+		if (search_size >= eocd_min_size) {
+			long j;
+			for (j = search_size - eocd_min_size; j >= 0; j--) {
+				if (eocd_buffer[j] == 0x50 &&
+				    eocd_buffer[j + 1] == 0x4b &&
+				    eocd_buffer[j + 2] == 0x05 &&
+				    eocd_buffer[j + 3] == 0x06) {
+					unsigned short comment_len =
+						eocd_buffer[j + 20] |
+						(eocd_buffer[j + 21] << 8);
+					if (comment_len ==
+					    search_size - j - eocd_min_size) {
+						eocd_offset =
+							file_size - search_size +
+							j;
+						eocd_found = true;
+						break;
+					}
+				}
 			}
 		}
-		if (i == 0xffff) {
+
+		kvfree(eocd_buffer);
+
+		if (!eocd_found) {
 			pr_info("error: cannot find eocd\n");
 			goto clean;
 		}
@@ -251,12 +287,16 @@ static __always_inline bool check_v2_signature(char *path,
 		if (id == 0x7109871au) {
 			v2_signing_blocks++;
 			v2_signing_valid = check_block(fp, &pos, pair_end, expected_size, expected_sha256);
-		} else if (id != 0x42726577u) { // APK verity padding
-			// https://cs.android.com/android/platform/superproject/+/android-latest-release:tools/apksig/src/main/java/com/android/apksig/internal/apk/ApkSigningBlockUtils.java;l=102;drc=ebe4dfd4fd6550c949a6c7c2427484bf5e96500b
+		} else if (id == 0xf05368c0u) {
+			// http://aospxref.com/android-14.0.0_r2/xref/frameworks/base/core/java/android/util/apk/ApkSignatureSchemeV3Verifier.java#73
+			v3_signing_exist = true;
+		} else if (id == 0x1b93ad61u) {
+			// http://aospxref.com/android-14.0.0_r2/xref/frameworks/base/core/java/android/util/apk/ApkSignatureSchemeV3Verifier.java#74
+			v3_1_signing_exist = true;
+		} else {
 #ifdef CONFIG_KSU_DEBUG
-			pr_info("Unexpected signature block id: 0x%08x\n", id);
+			pr_info("Unknown id: 0x%08x\n", id);
 #endif
-			goto invalid;
 		}
 		pos = pair_end;
 	}
@@ -274,6 +314,11 @@ invalid:
 	v2_signing_valid = false;
 clean:
 	filp_close(fp, 0);
+
+	if (v2_signing_valid && (v3_signing_exist || v3_1_signing_exist)) {
+		pr_err("Unexpected v3 signature scheme found!\n");
+		return false;
+	}
 
 	return v2_signing_valid;
 }

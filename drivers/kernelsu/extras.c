@@ -5,7 +5,6 @@
 #include "policy/feature.h"
 #include "uapi/feature.h"
 #include "klog.h"
-#include "ksu.h"
 #include "runtime/ksud.h"
 #include "infra/seccomp_cache.h"
 
@@ -66,14 +65,14 @@ static const struct ksu_feature_handler avc_spoof_handler = {
 static int get_sid()
 {
 	// dont load at all if we cant get sids
-	int err = ksu_security_secctx_to_secid("u:r:su:s0", strlen("u:r:su:s0"), &su_sid);
+	int err = security_secctx_to_secid("u:r:su:s0", strlen("u:r:su:s0"), &su_sid);
 	if (err) {
 		pr_info("avc_spoof/get_sid: su_sid not found!\n");
 		return -1;
 	}
 	pr_info("avc_spoof/get_sid: su_sid: %u\n", su_sid);
 
-	err = ksu_security_secctx_to_secid("u:r:priv_app:s0:c512,c768", strlen("u:r:priv_app:s0:c512,c768"), &priv_app_sid);
+	err = security_secctx_to_secid("u:r:priv_app:s0:c512,c768", strlen("u:r:priv_app:s0:c512,c768"), &priv_app_sid);
 	if (err) {
 		pr_info("avc_spoof/get_sid: priv_app_sid not found!\n");
 		return -1;
@@ -97,14 +96,14 @@ int ksu_handle_slow_avc_audit(u32 *tsid)
 	return 0;
 }
 
-#ifdef CONFIG_KPROBES
+#ifdef KSU_KPROBES_HOOK
 #include <linux/kprobes.h>
 #include <linux/slab.h>
 #include "arch.h"
-static struct kprobe *slow_avc_audit_kp;
+struct kprobe *slow_avc_audit_kp;
 //	.symbol_name = "slow_avc_audit",
 //	.pre_handler = slow_avc_audit_pre_handler,
-static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
+int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
 {
 	if (atomic_read(&disable_spoof))
 		return 0;
@@ -131,7 +130,7 @@ static int slow_avc_audit_pre_handler(struct kprobe *p, struct pt_regs *regs)
 }
 
 // copied from upstream
-static struct kprobe *init_kprobe(const char *name,
+struct kprobe *init_kprobe(const char *name,
 				  kprobe_pre_handler_t handler)
 {
 	struct kprobe *kp = kzalloc(sizeof(struct kprobe), GFP_KERNEL);
@@ -149,7 +148,7 @@ static struct kprobe *init_kprobe(const char *name,
 
 	return kp;
 }
-static void destroy_kprobe(struct kprobe **kp_ptr)
+void destroy_kprobe(struct kprobe **kp_ptr)
 {
 	struct kprobe *kp = *kp_ptr;
 	if (!kp)
@@ -159,11 +158,11 @@ static void destroy_kprobe(struct kprobe **kp_ptr)
 	kfree(kp);
 	*kp_ptr = NULL;
 }
-#endif // CONFIG_KPROBES
+#endif // KSU_KPROBES_HOOK
 
 void ksu_avc_spoof_disable(void)
 {
-#ifdef CONFIG_KPROBES
+#ifdef KSU_KPROBES_HOOK
 	pr_info("avc_spoof/exit: unregister slow_avc_audit kprobe!\n");
 	destroy_kprobe(&slow_avc_audit_kp);
 #endif
@@ -179,7 +178,7 @@ void ksu_avc_spoof_enable(void)
 		return;
 	}
 
-#ifdef CONFIG_KPROBES
+#ifdef KSU_KPROBES_HOOK
 	pr_info("avc_spoof/init: register slow_avc_audit kprobe!\n");
 	slow_avc_audit_kp = init_kprobe("slow_avc_audit", slow_avc_audit_pre_handler);
 #endif	

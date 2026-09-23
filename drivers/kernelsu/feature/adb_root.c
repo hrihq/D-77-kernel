@@ -1,4 +1,3 @@
-
 #include <asm/ptrace.h>
 #include <linux/namei.h>
 #include <linux/path.h>
@@ -36,8 +35,7 @@ static long is_exec_adbd(const char __user *filename_user)
         return ret;
     }
 
-    // strncpy_from_user may copy `sizeof(buf)` bytes
-    if (ret < kAdbdLen || ret >= sizeof(buf) || memcmp(buf + ret - kAdbdLen, kAdbd, kAdbdLen + 1) != 0) {
+    if (ret < kAdbdLen || memcmp(buf + ret - kAdbdLen, kAdbd, kAdbdLen + 1) != 0) {
         return 0;
     }
 
@@ -56,7 +54,6 @@ static long is_libadbroot_ok()
         } else {
             pr_err("access libadbroot.so failed: %ld, skip adb root\n", ret);
         }
-        return ret;
     } else {
         ret = 1;
     }
@@ -157,7 +154,9 @@ out_release_env_p:
     return ret;
 }
 
-static long do_ksu_adb_root_handle_execve(const char __user *filename_user, struct pt_regs *regs, unsigned long *envp_p)
+static long do_ksu_adb_root_handle_execve(const char __user *filename_user,
+					  struct pt_regs *regs,
+					  unsigned long *envp_p)
 {
     if (likely(is_exec_adbd(filename_user) != 1)) {
         return 0;
@@ -180,8 +179,9 @@ static long do_ksu_adb_root_handle_execve(const char __user *filename_user, stru
 long ksu_adb_root_handle_execve(struct pt_regs *regs)
 {
     if (static_branch_unlikely(&ksu_adb_root)) {
-        return do_ksu_adb_root_handle_execve((const char __user *)PT_REGS_PARM1(regs), regs,
-                                             (unsigned long *)&PT_REGS_PARM3(regs));
+        return do_ksu_adb_root_handle_execve(
+                (const char __user *)PT_REGS_PARM1(regs), regs,
+                (unsigned long *)&PT_REGS_PARM3(regs));
     }
     return 0;
 }
@@ -189,8 +189,9 @@ long ksu_adb_root_handle_execve(struct pt_regs *regs)
 long ksu_adb_root_handle_execveat(struct pt_regs *regs)
 {
     if (static_branch_unlikely(&ksu_adb_root)) {
-        return do_ksu_adb_root_handle_execve((const char __user *)PT_REGS_PARM2(regs), regs,
-                                             (unsigned long *)&PT_REGS_SYSCALL_PARM4(regs));
+        return do_ksu_adb_root_handle_execve(
+                (const char __user *)PT_REGS_PARM2(regs), regs,
+                (unsigned long *)&PT_REGS_SYSCALL_PARM4(regs));
     }
     return 0;
 }

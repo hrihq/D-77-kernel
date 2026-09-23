@@ -2,27 +2,15 @@
 #define __KSU_H_KSU
 
 #include <linux/types.h>
-#include <linux/cred.h>
 #include <linux/workqueue.h>
+#include <linux/cred.h>
 
 #define KERNEL_SU_VERSION KSU_VERSION
 #define KERNEL_SU_VERSION_TAG KSU_VERSION_TAG
 
-extern struct cred *ksu_cred;
-extern bool ksu_late_loaded;
-extern bool allow_shell;
-#ifdef MODULE
-extern bool ksu_bundled;
-#endif
-extern struct selinux_policy *backup_sepolicy;
-extern bool ksu_no_custom_rc;
-
-#ifdef CONFIG_ANDROID
-#include <linux/security.h>
-#define ksu_security_secctx_to_secid security_secctx_to_secid
-#else
-int ksu_security_secctx_to_secid(const char *secdata, u32 seclen, u32 *secid);
-#endif
+#define EVENT_POST_FS_DATA 1
+#define EVENT_BOOT_COMPLETED 2
+#define EVENT_MODULE_MOUNTED 3
 
 static inline int startswith(char *s, char *prefix)
 {
@@ -37,5 +25,8 @@ static inline int endswith(const char *s, const char *t)
 		return 1;
 	return strcmp(s + slen - tlen, t);
 }
+
+extern struct cred* ksu_cred;
+extern bool ksu_late_loaded;
 
 #endif
