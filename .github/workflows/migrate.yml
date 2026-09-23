@@ -7,12 +7,18 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     steps:
-    - name: Clone upstream (full history)
+    - name: Clone upstream (branch 23.2 only)
       run: |
-        git clone --mirror https://github.com/MiDoNaSR545/los_kernel_xiaomi_sm6150.git repo.git
-        cd repo.git
+        git init repo
+        cd repo
+        git remote add origin https://github.com/MiDoNaSR545/los_kernel_xiaomi_sm6150.git
+        git fetch --depth 1 origin 23.2
+        git checkout FETCH_HEAD
 
-    - name: Push mirror to new repo
+    - name: Push to new repo
       run: |
-        cd repo.git
-        git push --mirror "https://hrihq:${{ secrets.GH_TOKEN }}@github.com/hrihq/D-77-kernel.git"
+        cd repo
+        git branch -M 23.2
+        git push --force "https://hrihq:${{ secrets.GH_TOKEN }}@github.com/hrihq/D-77-kernel.git" 23.2
+    - name: Done
+      run: echo "Migration complete - branch 23.2"
