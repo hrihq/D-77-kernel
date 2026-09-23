@@ -24,6 +24,8 @@ on:
 jobs:
   D-77:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: 🔄 Checkout Code
@@ -257,3 +259,24 @@ jobs:
       with:
         name: D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}
         path: D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}.zip
+
+    - name: 📦 Publish Release
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        TAG="D-77-$(TZ=Asia/Jakarta date '+%Y%m%d-%H%M%S')"
+        gh release create "$TAG"           "D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}.zip"           --repo hrihq/D-77-kernel           --title "D-77 Kernel ${BUILD_DATE}"           --notes "## D-77 Kernel - Redmi Note 12 Pro 4G (sweet_k6a)
+
+        - Build type: ${{ github.event.inputs.build_type }}
+        - Compiler: ${{ github.event.inputs.compiler }}
+        - Kernel: 4.14.357
+        - KernelSU + SuSFS built-in
+        - Build date: ${BUILD_DATE}
+
+        ### Cara flash
+        1. Copy zip ke HH
+        2. Reboot ke TWRP/OrangeFox
+        3. Flash zip
+        4. Reboot
+
+        Device: sweet / sweet_k6a / sweet2"
