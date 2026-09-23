@@ -17,7 +17,7 @@
 #include <linux/syscalls.h>
 #include <linux/pagemap.h>
 #include <linux/compat.h>
-#ifdef CONFIG_KSU_SUSFS
+#if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS
 #include <linux/susfs_def.h>
 #include <linux/version.h>
 #endif
@@ -36,7 +36,7 @@
  * found on the VFS inode structure.  This is the default if no getattr inode
  * operation is supplied.
  */
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+#if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_SUS_KSTAT
 extern void susfs_generic_fillattr_spoofer(struct inode *inode, struct kstat *stat);
 #endif
 
@@ -55,7 +55,7 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
 	stat->ctime = inode->i_ctime;
 	stat->blksize = i_blocksize(inode);
 	stat->blocks = inode->i_blocks;
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+#if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_SUS_KSTAT
 	susfs_generic_fillattr_spoofer(inode, stat);
 #endif
 
@@ -88,7 +88,7 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 	stat->result_mask |= STATX_BASIC_STATS;
 	query_flags &= KSTAT_QUERY_FLAGS;
 	if (inode->i_op->getattr)
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+#if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_SUS_KSTAT
 	{
 		int err = inode->i_op->getattr(path, stat, request_mask,
 					    query_flags);
@@ -389,7 +389,7 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
 
 
 #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
-#if defined(CONFIG_KSU)
+#if defined(CONFIG_KSU_MANUAL_HOOK)
 extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
 			int *flags);
 #endif
@@ -401,7 +401,7 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 	int error;
 
 
-#if defined(CONFIG_KSU)
+#if defined(CONFIG_KSU_MANUAL_HOOK)
 	ksu_handle_stat(&dfd, &filename, &flag);
 #endif
 
