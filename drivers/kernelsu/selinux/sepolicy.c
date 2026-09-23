@@ -37,7 +37,6 @@ void *ksu_kvrealloc_compat(const void *p, size_t oldsize, size_t newsize,
 }
 #define ksu_kvrealloc(p, new_size, old_size)                                   \
     ksu_kvrealloc_compat(p, old_size, new_size, GFP_KERNEL)
-#endif
 
 static bool add_type(struct policydb *db, const char *type_name, bool attr)
 {
