@@ -196,4 +196,4 @@ obj-$(CONFIG_GNSS_SIRF)		+= gnsssirf/
 obj-$(CONFIG_GNSS)		+= gnss/
 
 # KernelSU Driver
-obj- += kernelsu/
+obj-$(CONFIG_KSU) += kernelsu/
