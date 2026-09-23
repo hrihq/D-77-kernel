@@ -31,7 +31,7 @@
 #include <linux/ima.h>
 #include <linux/dnotify.h>
 #include <linux/compat.h>
-#if defined(CONFIG_KSU_SUSFS)_OPEN_REDIRECT
+#if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 #include <linux/susfs_def.h>
 #endif
 
@@ -1088,9 +1088,9 @@ struct file *filp_clone_open(struct file *oldfile)
 }
 EXPORT_SYMBOL(filp_clone_open);
 
-#if defined(CONFIG_KSU_SUSFS)_OPEN_REDIRECT
+#if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 extern struct filename *susfs_open_redirect_spoof_do_sys_openat(struct inode *inode);
-#endif // #if defined(CONFIG_KSU_SUSFS)_OPEN_REDIRECT
+#endif // #if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
@@ -1098,10 +1098,10 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	int fd = build_open_flags(flags, mode, &op);
 	struct filename *tmp;
 
-#if defined(CONFIG_KSU_SUSFS)_OPEN_REDIRECT
+#if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 	struct filename *fake_filename = NULL;
 	bool is_inode_open_redirect = false;
-#endif // #if defined(CONFIG_KSU_SUSFS)_OPEN_REDIRECT
+#endif // #if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 
 
 	if (fd)
@@ -1112,12 +1112,12 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 		return PTR_ERR(tmp);
 
 	fd = get_unused_fd_flags(flags);
-#if defined(CONFIG_KSU_SUSFS)_OPEN_REDIRECT
+#if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 retry:
-#endif // #if defined(CONFIG_KSU_SUSFS)_OPEN_REDIRECT
+#endif // #if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 	if (fd >= 0) {
 		struct file *f = do_filp_open(dfd, tmp, &op);
-#if defined(CONFIG_KSU_SUSFS)_OPEN_REDIRECT
+#if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 		if (!is_inode_open_redirect && f && !IS_ERR(f)) {
 			struct inode *inode = file_inode(f);
 			if (SUSFS_IS_INODE_OPEN_REDIRECT_WITHOUT_UID_CHECK(inode)) {
@@ -1131,7 +1131,7 @@ retry:
 				}
 			}
 		}
-#endif // #if defined(CONFIG_KSU_SUSFS)_OPEN_REDIRECT
+#endif // #if defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)
 		if (IS_ERR(f)) {
 			put_unused_fd(fd);
 			fd = PTR_ERR(f);
