@@ -1,8 +1,24 @@
-#ifndef CONFIG_KSU_SUSFS
-static bool ksu_kernel_umount_enabled __read_mostly = true;
-#else
-bool ksu_kernel_umount_enabled = true;
-#endif // #ifndef CONFIG_KSU_SUSFS
+#include <linux/sched.h>
+#include <linux/slab.h>
+#include <linux/task_work.h>
+#include <linux/cred.h>
+#include <linux/fs.h>
+#include <linux/mount.h>
+#include <linux/namei.h>
+#include <linux/nsproxy.h>
+#include <linux/path.h>
+#include <linux/printk.h>
+#include <linux/types.h>
+
+#include "feature/kernel_umount.h"
+#include "klog.h" // IWYU pragma: keep
+#include "policy/allowlist.h"
+#include "selinux/selinux.h"
+#include "policy/feature.h"
+#include "runtime/ksud_boot.h"
+#include "ksu.h"
+
+static bool ksu_kernel_umount_enabled = true;
 
 static int kernel_umount_feature_get(u64 *value)
 {
@@ -27,18 +43,15 @@ static const struct ksu_feature_handler kernel_umount_handler = {
 
 extern int path_umount(struct path *path, int flags);
 
-static inline void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
+static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
-	if (err)
+	if (err) {
 		pr_info("umount %s failed: %d\n", mnt, err);
+	}
 }
 
-#if !defined(CONFIG_KSU_SUSFS) || !defined(CONFIG_KSU_SUSFS_TRY_UMOUNT)
 static void try_umount(const char *mnt, int flags)
-#else
-void try_umount(const char *mnt, int flags)
-#endif
 {
 	struct path path;
 	int err = kern_path(mnt, 0, &path);
@@ -52,49 +65,48 @@ void try_umount(const char *mnt, int flags)
 		return;
 	}
 
-#ifndef KSU_HAS_PATH_UMOUNT
-    ksu_umount_mnt(mnt, &path, flags);
-#else
-	ksu_umount_mnt(&path, flags);
-#endif
+	ksu_umount_mnt(mnt, &path, flags);
 }
-#if !defined(CONFIG_KSU_SUSFS) || !defined(CONFIG_KSU_SUSFS_TRY_UMOUNT)
-static inline int ksu_handle_umount(struct cred *new, const struct cred *old)
-{
-	uid_t new_uid = ksu_get_uid_t(new->uid);
-	uid_t old_uid = ksu_get_uid_t(old->uid);
-#if defined(CONFIG_KSU_SUSFS) || !defined(CONFIG_KSU_SUSFS_TRY_UMOUNT)
-	// if there isn't any module mounted, just ignore it!
-	if (!ksu_kernel_umount_enabled)
-		return 0;
 
+struct umount_tw {
+	struct callback_head cb;
+};
+
+int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
+{
 	// if there isn't any module mounted, just ignore it!
-	if (!ksu_module_mounted)
+	if (!ksu_module_mounted) {
 		return 0;
+	}
+
+	if (!ksu_kernel_umount_enabled) {
+		return 0;
+	}
 
 	// There are 6 scenarios:
 	// 1. Normal app: zygote -> appuid
 	// 2. Isolated process forked from zygote: zygote -> isolated_process
 	// 3. App zygote forked from zygote: zygote -> appuid
-	// 4. Webview zygote forked from zygote: zygote -> WEBVIEW_ZYGOTE_UID (no need to handle, app cannot run custom code)
+	// 4. Webview zygote forked from zygote: zygote -> webview_zygote
 	// 5. Isolated process forked from app zygote: appuid -> isolated_process (already handled by 3)
-	// 6. Isolated process forked from webview zygote (no need to handle, app cannot run custom code)
-	if (!is_appuid(new_uid) && !is_isolated_process(new_uid))
+	// 6. Isolated process forked from webview zygote (already handled by 4)
+	if (!is_appuid(new_uid) && new_uid != WEBVIEW_ZYGOTE_UID && !is_isolated_process(new_uid)) {
 		return 0;
+	}
 
-	if (!ksu_uid_should_umount(new_uid) && !is_isolated_process(new_uid))
+	if (!ksu_uid_should_umount(new_uid) && !is_isolated_process(new_uid)) {
 		return 0;
+	}
 
 	// check old process's selinux context, if it is not zygote, ignore it!
 	// because some su apps may setuid to untrusted_app but they are in global mount namespace
 	// when we umount for such process, that is a disaster!
 	// also handle case 4 and 5
-	bool is_zygote_child = is_zygote(old);
+	bool is_zygote_child = is_zygote(current_cred());
 	if (!is_zygote_child) {
 		pr_info("handle umount ignore non zygote child: %d\n", current->pid);
 		return 0;
 	}
-#endif // #if defined(CONFIG_KSU_SUSFS) || !defined(CONFIG_KSU_SUSFS_TRY_UMOUNT)
 	// umount the target mnt
 	pr_info("handle umount for uid: %d, pid: %d\n", new_uid, current->pid);
 
@@ -112,7 +124,6 @@ static inline int ksu_handle_umount(struct cred *new, const struct cred *old)
 
 	return 0;
 }
-#endif // #if defined(CONFIG_KSU_SUSFS) || !defined(CONFIG_KSU_SUSFS_TRY_UMOUNT)
 
 void __init ksu_kernel_umount_init(void)
 {

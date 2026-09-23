@@ -1,108 +1,127 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
- * Copyright (C) 2026 \xx
- *
- * This file is a downstream extension and NOT affiliated, endorsed by,
- * or maintained by the official KernelSU developers.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- */
+// SPDX-License-Identifier: GPL-2.0
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/namei.h>
+#include <linux/fsnotify_backend.h>
+#include <linux/slab.h>
+#include <linux/rculist.h>
+#include <linux/version.h>
+#include "klog.h" // IWYU pragma: keep
+#include "manager/throne_tracker.h"
 
-/*
- * ! this is on inode_rename, NOT fsnotify
- * we have access to LSM and overhead is way lower.
- * we watch one file, check ifs on the same parent inode.
- * a few int compare and a ptr compare. thats it.
- * as for throne tracker, we just async it by hand
- * by offloading it to a kthread.
- * reuses code from: https://github.com/tiann/KernelSU/blob/v1.0.5/kernel/core_hook.c#L188
- */
+#define MASK_SYSTEM (FS_CREATE | FS_MOVE | FS_EVENT_ON_CHILD)
 
-static void *system_dir_inode_ptr = NULL;
+struct watch_dir {
+	const char *path;
+	u32 mask;
+	struct path kpath;
+	struct inode *inode;
+	struct fsnotify_mark *mark;
+};
 
-static noinline void ksu_grab_data_system_inode()
+static struct fsnotify_group *g;
+
+static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
+                                  struct inode *inode, struct inode *dir,
+                                  const struct qstr *file_name, u32 cookie)
 {
-	struct path path;
-	int ret = kern_path("/data/system", LOOKUP_FOLLOW, &path);
+    if (!file_name)
+        return 0;
+    if (mask & FS_ISDIR)
+        return 0;
+    if (file_name->len == 13 && !memcmp(file_name->name, "packages.list", 13)) {
+        pr_info("packages.list detected: %d\n", mask);
+        track_throne(false);
+    }
+    return 0;
+}
+
+static const struct fsnotify_ops ksu_ops = {
+	.handle_inode_event = ksu_handle_inode_event,
+};
+
+static int add_mark_on_inode(struct inode *inode, u32 mask,
+                             struct fsnotify_mark **out)
+{
+	struct fsnotify_mark *m;
+
+	m = kzalloc(sizeof(*m), GFP_KERNEL);
+	if (!m)
+		return -ENOMEM;
+
+	fsnotify_init_mark(m, g);
+	m->mask = mask;
+
+	if (fsnotify_add_inode_mark(m, inode, 0)) {
+		fsnotify_put_mark(m);
+		return -EINVAL;
+	}
+	*out = m;
+	return 0;
+}
+
+static int watch_one_dir(struct watch_dir *wd)
+{
+	int ret = kern_path(wd->path, LOOKUP_FOLLOW, &wd->kpath);
 	if (ret) {
-		pr_info("renameat: /data/system not ready? ret: (%d)\n", ret);
-		return;
+		pr_info("path not ready: %s (%d)\n", wd->path, ret);
+		return ret;
 	}
+	wd->inode = d_inode(wd->kpath.dentry);
+	ihold(wd->inode);
 
-	system_dir_inode_ptr = (void *)d_inode(path.dentry);
-	pr_info("renameat: cached /data/system d_inode: 0x%lx\n", system_dir_inode_ptr);
-	path_put(&path);
+	ret = add_mark_on_inode(wd->inode, wd->mask, &wd->mark);
+	if (ret) {
+		pr_err("Add mark failed for %s (%d)\n", wd->path, ret);
+		path_put(&wd->kpath);
+		iput(wd->inode);
+		wd->inode = NULL;
+		return ret;
+	}
+	pr_info("watching %s\n", wd->path);
+	return 0;
 }
 
-static void ksu_rename_observer_slow(struct dentry *old_dentry, struct dentry *new_dentry)
+static void unwatch_one_dir(struct watch_dir *wd)
 {
-	system_dir_inode_ptr = NULL; // reset cached inode
-
-	char path[128] = { 0 };
-	char *buf = dentry_path_raw(new_dentry, path, sizeof(path) - 1);
-	if (IS_ERR(buf)) {
-		pr_err("dentry_path_raw failed.\n");
-		return;
+	if (wd->mark) {
+		fsnotify_destroy_mark(wd->mark, g);
+		fsnotify_put_mark(wd->mark);
+		wd->mark = NULL;
 	}
-
-	if (!strstr(buf, "/system/packages.list"))
-		return;
-
-	pr_info("renameat: %s -> %s, new path: %s\n", old_dentry->d_iname, new_dentry->d_iname, buf);
-	track_throne(false);
-	return;
+	if (wd->inode) {
+		iput(wd->inode);
+		wd->inode = NULL;
+	}
+	if (wd->kpath.dentry) {
+		path_put(&wd->kpath);
+		memset(&wd->kpath, 0, sizeof(wd->kpath));
+	}
 }
 
-static inline void ksu_rename_observer(struct dentry *old_dentry, struct dentry *new_dentry)
+static struct watch_dir g_watch = { .path = "/data/system",
+                                    .mask = MASK_SYSTEM };
+
+int ksu_observer_init(void)
 {
-	// skip kernel threads
-	if (!current->mm)
-		return;
+	int ret = 0;
 
-	if (!old_dentry || !new_dentry)
-		return;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+	g = fsnotify_alloc_group(&ksu_ops, 0);
+#else
+	g = fsnotify_alloc_group(&ksu_ops);
+#endif
+	if (IS_ERR(g))
+		return PTR_ERR(g);
 
-	// skip non system uid
-	if (likely(current_uid().val != 1000))
-		return;
+	ret = watch_one_dir(&g_watch);
+	pr_info("observer init done\n");
+	return 0;
+}
 
-	// HASH_LEN_DECLARE see dcache.h
-	if (likely(new_dentry->d_name.len != sizeof("packages.list") - 1  ))
-		return;
-
-	// /data/system/packages.list.tmp -> /data/system/packages.list
-	if (likely(!!__builtin_memcmp(new_dentry->d_iname, "packages.list", sizeof("packages.list") - 1 )))
-		return;
-
-	// cache dir inode, we try to go for fast path, lockless
-	if (unlikely(!system_dir_inode_ptr))
-		ksu_grab_data_system_inode();
-
-	if (unlikely(!system_dir_inode_ptr))
-		goto slow_path;
-
-	if (unlikely(!new_dentry->d_parent || !new_dentry->d_parent->d_inode))
-		goto slow_path;
-
-	/*
-	 * fallback to slow path, but this should NOT change unless someone overlays /data/system
-	 * but then again maybe https://github.com/tiann/KernelSU/pull/2633#discussion_r2141740346
-	 * but /data is casefolded, overlaying is really really unlikely
-	 * we self heal this thing, so on enxt run, it will try to grab d inode again
-	 * alternatively we can use packages.list inode change as trigger too, however,
-	 * we need to save last state. more writes.
-	 */
-	if (unlikely((void *)new_dentry->d_parent->d_inode != system_dir_inode_ptr))
-		goto slow_path;
-
-	pr_info("renameat: %s -> %s, /data/system d_inode: 0x%lx \n", old_dentry->d_iname, new_dentry->d_iname, system_dir_inode_ptr);
-	track_throne(false);
-	return;
-
-slow_path:
-	ksu_rename_observer_slow(old_dentry, new_dentry);
-	return;
+void __exit ksu_observer_exit(void)
+{
+	unwatch_one_dir(&g_watch);
+	fsnotify_put_group(g);
+	pr_info("observer exit done\n");
 }
