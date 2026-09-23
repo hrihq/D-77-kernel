@@ -211,16 +211,9 @@ void migrate_to_reboot_cpu(void)
  *	Shutdown everything and perform a clean reboot.
  *	This is not safe to call in interrupt context.
  */
-#ifdef CONFIG_KSU_MANUAL_HOOK
-extern void ksu_handle_sys_reboot(void);
-#endif
-
 void kernel_restart(char *cmd)
 {
 	kernel_restart_prepare(cmd);
-#ifdef CONFIG_KSU_MANUAL_HOOK
-	ksu_handle_sys_reboot();
-#endif
 	migrate_to_reboot_cpu();
 	syscore_shutdown();
 	if (!cmd)

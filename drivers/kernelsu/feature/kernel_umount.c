@@ -9,18 +9,14 @@
 #include <linux/path.h>
 #include <linux/printk.h>
 #include <linux/types.h>
-#ifndef KSU_HAS_PATH_UMOUNT
-#include <linux/syscalls.h>
-#endif
 
-#include "kernel_umount.h"
+#include "feature/kernel_umount.h"
 #include "klog.h" // IWYU pragma: keep
 #include "policy/allowlist.h"
 #include "selinux/selinux.h"
 #include "policy/feature.h"
 #include "runtime/ksud_boot.h"
 #include "ksu.h"
-#include "compat/kernel_compat.h"
 
 static bool ksu_kernel_umount_enabled = true;
 
@@ -45,9 +41,8 @@ static const struct ksu_feature_handler kernel_umount_handler = {
 	.set_handler = kernel_umount_feature_set,
 };
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0) ||                           \
-	defined(KSU_HAS_PATH_UMOUNT)
 extern int path_umount(struct path *path, int flags);
+
 static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 {
 	int err = path_umount(path, flags);
@@ -55,29 +50,6 @@ static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
 		pr_info("umount %s failed: %d\n", mnt, err);
 	}
 }
-#else
-static void ksu_sys_umount(const char *mnt, int flags)
-{
-	char __user *usermnt = (char __user *)mnt;
-	mm_segment_t old_fs;
-
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
-	ksys_umount(usermnt, flags);
-#else
-	sys_umount(usermnt, flags); // cuz asmlinkage long sys##name
-#endif
-	set_fs(old_fs);
-}
-
-#define ksu_umount_mnt(mnt, __unused, flags)                                   \
-	({                                                                     \
-		path_put(__unused);                                            \
-		ksu_sys_umount(mnt, flags);                                    \
-	})
-
-#endif
 
 static void try_umount(const char *mnt, int flags)
 {
@@ -92,35 +64,16 @@ static void try_umount(const char *mnt, int flags)
 		path_put(&path);
 		return;
 	}
-    ksu_umount_mnt(mnt, &path, flags);
+
+	ksu_umount_mnt(mnt, &path, flags);
 }
 
 struct umount_tw {
 	struct callback_head cb;
 };
 
-static void umount_tw_func(struct callback_head *cb)
-{
-	struct umount_tw *tw = container_of(cb, struct umount_tw, cb);
-	const struct cred *saved = override_creds(ksu_cred);
-
-    struct mount_entry *entry;
-    down_read(&mount_list_lock);
-    list_for_each_entry(entry, &mount_list, list) {
-        pr_info("%s: unmounting: %s flags: 0x%x\n", __func__, entry->umountable, entry->flags);
-        try_umount(entry->umountable, entry->flags);
-    }
-    up_read(&mount_list_lock);
-
-	revert_creds(saved);
-
-	kfree(tw);
-}
-
 int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 {
-	struct umount_tw *tw;
-
 	// if there isn't any module mounted, just ignore it!
 	if (!ksu_module_mounted) {
 		return 0;
@@ -130,18 +83,14 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 		return 0;
 	}
 
-	if (!ksu_cred) {
-		return 0;
-	}
-
 	// There are 6 scenarios:
 	// 1. Normal app: zygote -> appuid
 	// 2. Isolated process forked from zygote: zygote -> isolated_process
 	// 3. App zygote forked from zygote: zygote -> appuid
-	// 4. Webview zygote forked from zygote: zygote -> WEBVIEW_ZYGOTE_UID (no need to handle, app cannot run custom code)
+	// 4. Webview zygote forked from zygote: zygote -> webview_zygote
 	// 5. Isolated process forked from app zygote: appuid -> isolated_process (already handled by 3)
-	// 6. Isolated process forked from webview zygote (no need to handle, app cannot run custom code)
-	if (!is_appuid(new_uid) && !is_isolated_process(new_uid)) {
+	// 6. Isolated process forked from webview zygote (already handled by 4)
+	if (!is_appuid(new_uid) && new_uid != WEBVIEW_ZYGOTE_UID && !is_isolated_process(new_uid)) {
 		return 0;
 	}
 
@@ -161,17 +110,17 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
 	// umount the target mnt
 	pr_info("handle umount for uid: %d, pid: %d\n", new_uid, current->pid);
 
-	tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
-	if (!tw)
-		return 0;
+	const struct cred *saved = override_creds(ksu_cred);
 
-	tw->cb.func = umount_tw_func;
-
-	int err = task_work_add(current, &tw->cb, TWA_RESUME);
-	if (err) {
-		kfree(tw);
-		pr_warn("unmount add task_work failed\n");
+	struct mount_entry *entry;
+	down_read(&mount_list_lock);
+	list_for_each_entry (entry, &mount_list, list) {
+		pr_info("%s: unmounting: %s flags: 0x%x\n", __func__, entry->umountable, entry->flags);
+		try_umount(entry->umountable, entry->flags);
 	}
+	up_read(&mount_list_lock);
+
+	revert_creds(saved);
 
 	return 0;
 }

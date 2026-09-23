@@ -3,11 +3,6 @@
 #include <linux/string.h>
 #include <linux/version.h>
 
-// __nocfi is an arm64-only attribute; make it a no-op elsewhere
-#ifndef __nocfi
-#define __nocfi
-#endif
-
 #include "infra/symbol_resolver.h"
 
 // https://github.com/torvalds/linux/commit/89245600941e4e0f87d77f60ee269b5e61ef4e49
