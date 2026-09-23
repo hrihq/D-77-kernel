@@ -736,6 +736,11 @@ static int do_get_version_tag(void __user *arg)
 static int do_set_init_pgrp(void __user *arg)
 {
     int err;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+    // 4.14: task_pgrp/task_session return pid_t, not struct pid*
+    #define task_pgrp(tsk) task_pgrp_nr(tsk)
+    #define task_session(tsk) task_session_nr(tsk)
+#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
     struct pid *pids[PIDTYPE_MAX] = { 0 };
 #endif
