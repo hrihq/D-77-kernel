@@ -36,7 +36,7 @@
  * found on the VFS inode structure.  This is the default if no getattr inode
  * operation is supplied.
  */
-#if defined(CONFIG_KSU_SUSFS)_SUS_KSTAT
+#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT)
 extern void susfs_generic_fillattr_spoofer(struct inode *inode, struct kstat *stat);
 #endif
 
@@ -55,7 +55,7 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
 	stat->ctime = inode->i_ctime;
 	stat->blksize = i_blocksize(inode);
 	stat->blocks = inode->i_blocks;
-#if defined(CONFIG_KSU_SUSFS)_SUS_KSTAT
+#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT)
 	susfs_generic_fillattr_spoofer(inode, stat);
 #endif
 
@@ -88,7 +88,7 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
 	stat->result_mask |= STATX_BASIC_STATS;
 	query_flags &= KSTAT_QUERY_FLAGS;
 	if (inode->i_op->getattr)
-#if defined(CONFIG_KSU_SUSFS)_SUS_KSTAT
+#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT)
 	{
 		int err = inode->i_op->getattr(path, stat, request_mask,
 					    query_flags);
