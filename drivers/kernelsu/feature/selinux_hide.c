@@ -29,6 +29,16 @@
 #include "policy/feature.h"
 #include "hook/lsm_hook.h"
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+// 4.14 selinux internal API (selinux_policy, status_page, policy field) incompatible.
+// selinux_hide feature disabled; root still works.
+#include <linux/version.h>
+void __init ksu_selinux_hide_init() {}
+void __exit ksu_selinux_hide_exit() {}
+void ksu_selinux_hide_handle_second_stage() {}
+void ksu_selinux_hide_handle_post_fs_data() {}
+void ksu_selinux_hide_drop_backup_if_unused() {}
+#else
 static DEFINE_MUTEX(selinux_hide_mutex);
 static bool ksu_selinux_hide_enabled __read_mostly = false;
 static bool ksu_selinux_hide_running __read_mostly = false;
@@ -1163,4 +1173,6 @@ allow:
     avd->allowed = 0xffffffff;
     goto out;
 }
+#endif
+
 #endif
