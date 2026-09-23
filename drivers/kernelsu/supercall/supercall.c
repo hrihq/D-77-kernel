@@ -8,6 +8,9 @@
 #include <linux/slab.h>
 #include <linux/syscalls.h>
 #include <linux/task_work.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
+#define TWA_RESUME true // 4.14: task_work_add takes bool
+#endif
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/utsname.h> // utsname() and uts_sem
