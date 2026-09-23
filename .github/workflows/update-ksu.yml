@@ -15,31 +15,34 @@ jobs:
         ref: 23.2
         fetch-depth: 1
 
-    - name: Remove old KSU driver
+    - name: Remove current KSU driver
       run: |
         rm -rf drivers/kernelsu
         sed -i '/kernelsu/d' drivers/Makefile
         sed -i '/kernelsu/d' drivers/Kconfig
 
-    - name: Integrate KernelSU-Next v3.4.0
+    - name: Integrate KernelSU-Next legacy branch
       run: |
-        git clone --depth 1 --branch v3.4.0 https://github.com/KernelSU-Next/KernelSU-Next.git /tmp/ksu-src
+        git clone --depth 1 --branch legacy https://github.com/KernelSU-Next/KernelSU-Next.git /tmp/ksu-src
         mkdir -p drivers/kernelsu
         cp -a /tmp/ksu-src/kernel/. drivers/kernelsu/
         grep -q "kernelsu" drivers/Makefile || echo "obj-$(CONFIG_KSU) += kernelsu/" >> drivers/Makefile
         sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
         ls drivers/kernelsu/
 
-    - name: Enable KSU in defconfig
+    - name: Enable KSU + legacy syscall table hook
       run: |
         sed -i '/CONFIG_KSU/d; /SUSFS/d' arch/arm64/configs/sweet_defconfig
-        echo "CONFIG_KSU=y" >> arch/arm64/configs/sweet_defconfig
-        grep -E "CONFIG_KSU|KPROBES|KALLSYMS_ALL" arch/arm64/configs/sweet_defconfig
+        cat >> arch/arm64/configs/sweet_defconfig << 'EOF'
+        CONFIG_KSU=y
+        CONFIG_KSU_SYSCALL_TABLE_HOOK=y
+        EOF
+        grep -E "CONFIG_KSU|CONFIG_KPROBES|CONFIG_KRETPROBES" arch/arm64/configs/sweet_defconfig
 
-    - name: Commit
+    - name: Commit & push
       run: |
         git config user.name "hrihq"
         git config user.email "hrihq@users.noreply.github.com"
         git add -A
-        git commit -m "KernelSU-Next: integrate v3.4.0, drop legacy driver" || echo "nothing to commit"
+        git commit -m "KernelSU-Next: legacy branch driver (non-GKI syscall table hook)" || echo "nothing to commit"
         git push "https://hrihq:${{ secrets.GH_TOKEN }}@github.com/hrihq/D-77-kernel.git" HEAD:23.2
