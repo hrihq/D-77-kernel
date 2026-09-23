@@ -12,6 +12,7 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/mount.h>
+#include <linux/dcache.h>
 
 #include "objsec.h"
 
@@ -522,8 +523,19 @@ static struct file *ksu_anon_inode_create_getfile_compat(
         goto err;
     }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
     file = alloc_file_pseudo(inode, anon_inode_mnt, name,
                              flags & (O_ACCMODE | O_NONBLOCK), fops);
+#else
+    // Linux 4.14: no alloc_file_pseudo. anon_inode_getfile is exported and
+    // does alloc_file(d_alloc_pseudo) internally. It shares a single inode
+    // so security_inode_init_security_anon context is not per-file, which is
+    // acceptable for our wrapper.
+    file = anon_inode_getfile(name, fops, priv, flags);
+    if (IS_ERR(file))
+        goto err;
+    return file;
+#endif
     if (IS_ERR(file))
         goto err_iput;
 
