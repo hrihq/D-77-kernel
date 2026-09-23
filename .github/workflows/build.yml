@@ -280,4 +280,4 @@ jobs:
         4. Reboot
 
         Device: sweet / sweet_k6a / sweet2"
-        gh release create "$TAG" "D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}.zip"           --repo hrihq/D-77-kernel           --title "D-77 Kernel ${BUILD_DATE}"           --notes "$NOTES"
+        gh release create "$TAG"           "D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}.zip"           --repo hrihq/D-77-kernel           --title "D-77 Kernel ${BUILD_DATE}"           --notes "$NOTES"
