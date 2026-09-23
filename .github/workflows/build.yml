@@ -259,27 +259,47 @@ jobs:
       with:
         name: D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}
         path: D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}.zip
-
-    - name: 📦 Publish Release
+    - name: 📦 Publish Release & Notify
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        TG_TOKEN: ${{ secrets.TG_TOKEN }}
+        CHAT_ID: ${{ secrets.TG_CHAT_ID }}
       run: |
         TAG="D-77-$(TZ=Asia/Jakarta date '+%Y%m%d-%H%M%S')"
-        NOTES=$(cat <<'NOTESEOF'
-        ## D-77 Kernel - Redmi Note 12 Pro 4G (sweet_k6a)
+        NOTES="## D-77 Kernel - Redmi Note 12 Pro 4G (sweet_k6a)
 
-        - Build type: ${{ github.event.inputs.build_type }}
-        - Compiler: ${{ github.event.inputs.compiler }}
-        - Kernel: 4.14.357
-        - KernelSU-Next (legacy, non-GKI syscall table hook)
-        - Build date: ${BUILD_DATE}
+"
+        NOTES="${NOTES}- Build type: ${{ github.event.inputs.build_type }}
+"
+        NOTES="${NOTES}- Compiler: ${{ github.event.inputs.compiler }}
+"
+        NOTES="${NOTES}- Kernel: 4.14.357
+"
+        NOTES="${NOTES}- KernelSU-Next (legacy, non-GKI syscall table hook)
+"
+        NOTES="${NOTES}- Build date: ${BUILD_DATE}
 
-        Device: sweet / sweet_k6a / sweet2
+"
+        NOTES="${NOTES}Device: sweet / sweet_k6a / sweet2
 
-        ### Credits
-        - Base kernel: @MiDoNaSR
-        - KernelSU-Next: KernelSU-Next Team
-        - Maintainer: @hrihq
-        NOTESEOF
-        )
+"
+        NOTES="${NOTES}### Credits
+"
+        NOTES="${NOTES}- Base kernel: @MiDoNaSR
+"
+        NOTES="${NOTES}- KernelSU-Next: KernelSU-Next Team
+"
+        NOTES="${NOTES}- Maintainer: @hrihq"
+
         gh release create "$TAG" "D-77-${{ github.ref_name }}-${{ env.BUILD_TIME }}.zip"           --repo hrihq/D-77-kernel           --title "D-77 Kernel ${BUILD_DATE}"           --notes "$NOTES"
+
+        MSG="📱 **D-77 Kernel** - Redmi Note 12 Pro 4G (sweet_k6a)%0A%0A"
+        MSG="${MSG}▪️ Build type: ${{ github.event.inputs.build_type }}%0A"
+        MSG="${MSG}▪️ Compiler: ${{ github.event.inputs.compiler }}%0A"
+        MSG="${MSG}▪️ Kernel: 4.14.357%0A"
+        MSG="${MSG}▪️ KernelSU-Next (legacy, non-GKI)%0A"
+        MSG="${MSG}▪️ Date: ${BUILD_DATE}%0A%0A"
+        MSG="${MSG}**Download:** https://github.com/hrihq/D-77-kernel/releases/tag/${TAG}%0A%0A"
+        MSG="${MSG}Credits: @MiDoNaSR | Maintainer: @hrihq"
+
+        curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage"           -d "chat_id=${CHAT_ID}"           -d "parse_mode=Markdown"           --data-urlencode "text=${MSG}"
