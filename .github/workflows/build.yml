@@ -22,7 +22,7 @@ on:
           - Neutron-Clang
 
 jobs:
-  Reforging:
+  D-77:
     runs-on: ubuntu-latest
 
     steps:
@@ -163,8 +163,8 @@ jobs:
         export ARCH=arm64
         export SUBARCH=arm64
 
-        export KBUILD_BUILD_USER=MiDoNaSR
-        export KBUILD_BUILD_HOST=LineageOS
+        export KBUILD_BUILD_USER=hrihq
+        export KBUILD_BUILD_HOST=D-77
 
         export PATH="$CLANG_PATH/bin:$PATH"
 
@@ -238,7 +238,7 @@ jobs:
 
         git clone \
           --depth=1 \
-          https://github.com/MiDoNaSR545/Anykernel3.git \
+          https://github.com/hrihq/anykernel3.git \
           AnyKernel3
 
         cp out/arch/arm64/boot/Image.gz AnyKernel3/Image.gz
