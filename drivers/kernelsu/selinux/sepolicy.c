@@ -21,7 +21,6 @@ int handle_sepolicy(void __user *user_data, u64 data_len) { return -EINVAL; }
 void ksu_destroy_sepolicy(struct selinux_policy *orig) {}
 struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol) { return NULL; }
 #else
-#else
 void *ksu_kvrealloc_compat(const void *p, size_t oldsize, size_t newsize,
                            gfp_t flags)
 {
