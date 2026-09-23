@@ -21,13 +21,6 @@ int handle_sepolicy(void __user *user_data, u64 data_len) { return -EINVAL; }
 void ksu_destroy_sepolicy(void *pol) {}
 void *ksu_dup_sepolicy(void *old_pol) { return NULL; }
 #else
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0))
-// 4.14 selinux internal API incompatible (flex_array avtab, selinux_ss).
-// sepolicy patching is a no-op; root still works.
-int handle_sepolicy(void __user *user_data, u64 data_len) { return -EINVAL; }
-void ksu_destroy_sepolicy(void *pol) {}
-void *ksu_dup_sepolicy(void *old_pol) { return NULL; }
-#else
 void *ksu_kvrealloc_compat(const void *p, size_t oldsize, size_t newsize,
                            gfp_t flags)
 {
