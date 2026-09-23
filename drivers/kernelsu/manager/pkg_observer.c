@@ -37,7 +37,11 @@ static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
 }
 
 static const struct fsnotify_ops ksu_ops = {
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
 	.handle_inode_event = ksu_handle_inode_event,
+#else
+	.handle_event = ksu_handle_event,
+#endif
 };
 
 static int add_mark_on_inode(struct inode *inode, u32 mask,
@@ -52,7 +56,11 @@ static int add_mark_on_inode(struct inode *inode, u32 mask,
 	fsnotify_init_mark(m, g);
 	m->mask = mask;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
 	if (fsnotify_add_inode_mark(m, inode, 0)) {
+#else
+	if (fsnotify_add_mark(m, inode, NULL, 0)) {
+#endif
 		fsnotify_put_mark(m);
 		return -EINVAL;
 	}
