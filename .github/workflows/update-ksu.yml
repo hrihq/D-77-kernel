@@ -14,37 +14,29 @@ jobs:
       with:
         ref: 23.2
         fetch-depth: 1
-        token: ${{ secrets.GH_TOKEN }}
 
     - name: Remove old KSU driver
       run: |
-        git rm -rf drivers/kernelsu || rm -rf drivers/kernelsu
+        rm -rf drivers/kernelsu
         sed -i '/kernelsu/d' drivers/Makefile
-        sed -i '/drivers\/kernelsu\/Kconfig/d' drivers/Kconfig
+        sed -i '/kernelsu/d' drivers/Kconfig
 
     - name: Integrate KernelSU-Next v3.4.0
       run: |
         git clone --depth 1 --branch v3.4.0 https://github.com/KernelSU-Next/KernelSU-Next.git /tmp/ksu-src
         mkdir -p drivers/kernelsu
         cp -a /tmp/ksu-src/kernel/. drivers/kernelsu/
-        # masukkan ke build
-        grep -q "kernelsu" drivers/Makefile || printf '
-obj-$(CONFIG_KSU) += kernelsu/
-' >> drivers/Makefile
-        sed -i '/endmenu/i\source "drivers/kernelsu/Kconfig"' drivers/Kconfig
-        # rename root Kconfig biar terbaca sbg menu source
+        grep -q "kernelsu" drivers/Makefile || echo "obj-$(CONFIG_KSU) += kernelsu/" >> drivers/Makefile
+        sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
         ls drivers/kernelsu/
 
-    - name: Enable KSU + cleanup defconfig
+    - name: Enable KSU in defconfig
       run: |
-        # hapus config KSU/SUSFS lama
         sed -i '/CONFIG_KSU/d; /SUSFS/d' arch/arm64/configs/sweet_defconfig
-        printf 'CONFIG_KSU=y
-' >> arch/arm64/configs/sweet_defconfig
-        echo "=== defconfig KSU ==="
-        grep -E "CONFIG_KSU|KPROBE|KALLSYMS" arch/arm64/configs/sweet_defconfig
+        echo "CONFIG_KSU=y" >> arch/arm64/configs/sweet_defconfig
+        grep -E "CONFIG_KSU|KPROBES|KALLSYMS_ALL" arch/arm64/configs/sweet_defconfig
 
-    - name: Commit & push
+    - name: Commit
       run: |
         git config user.name "hrihq"
         git config user.email "hrihq@users.noreply.github.com"
