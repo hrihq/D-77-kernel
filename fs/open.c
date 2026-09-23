@@ -31,7 +31,7 @@
 #include <linux/ima.h>
 #include <linux/dnotify.h>
 #include <linux/compat.h>
-#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_OPEN_REDIRECT
 #include <linux/susfs_def.h>
 #endif
 
@@ -363,7 +363,7 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
  * We do this by temporarily clearing all FS-related capabilities and
  * switching the fsuid/fsgid around to the real ones.
  */
-#ifdef CONFIG_KSU
+#if defined(CONFIG_KSU_MANUAL_HOOK)
 __attribute__((hot))
 extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user,
 				int *mode, int *flags);
@@ -380,7 +380,7 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
 
 
-#ifdef CONFIG_KSU
+#if defined(CONFIG_KSU_MANUAL_HOOK)
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
 #endif
 
@@ -1088,9 +1088,9 @@ struct file *filp_clone_open(struct file *oldfile)
 }
 EXPORT_SYMBOL(filp_clone_open);
 
-#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_OPEN_REDIRECT
 extern struct filename *susfs_open_redirect_spoof_do_sys_openat(struct inode *inode);
-#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#endif // #if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_OPEN_REDIRECT
 
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
@@ -1098,10 +1098,10 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	int fd = build_open_flags(flags, mode, &op);
 	struct filename *tmp;
 
-#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_OPEN_REDIRECT
 	struct filename *fake_filename = NULL;
 	bool is_inode_open_redirect = false;
-#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#endif // #if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_OPEN_REDIRECT
 
 
 	if (fd)
@@ -1112,12 +1112,12 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 		return PTR_ERR(tmp);
 
 	fd = get_unused_fd_flags(flags);
-#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_OPEN_REDIRECT
 retry:
-#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#endif // #if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_OPEN_REDIRECT
 	if (fd >= 0) {
 		struct file *f = do_filp_open(dfd, tmp, &op);
-#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_OPEN_REDIRECT
 		if (!is_inode_open_redirect && f && !IS_ERR(f)) {
 			struct inode *inode = file_inode(f);
 			if (SUSFS_IS_INODE_OPEN_REDIRECT_WITHOUT_UID_CHECK(inode)) {
@@ -1131,7 +1131,7 @@ retry:
 				}
 			}
 		}
-#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#endif // #if defined(CONFIG_KSU_MANUAL_HOOK)_SUSFS_OPEN_REDIRECT
 		if (IS_ERR(f)) {
 			put_unused_fd(fd);
 			fd = PTR_ERR(f);
