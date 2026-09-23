@@ -91,6 +91,7 @@ static ssize_t ksu_wrapper_write_iter(struct kiocb *iocb, struct iov_iter *iovi)
     return orig->f_op->write_iter(iocb, iovi);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 static int ksu_wrapper_iopoll(struct kiocb *kiocb, struct io_comp_batch *icb,
                               unsigned int v)
@@ -108,6 +109,7 @@ static int ksu_wrapper_iopoll(struct kiocb *kiocb, bool spin)
     kiocb->ki_filp = orig;
     return orig->f_op->iopoll(kiocb, spin);
 }
+#endif
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
@@ -331,6 +333,7 @@ static ssize_t ksu_wrapper_copy_file_range(struct file *file_in, loff_t pos_in,
 // https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/remap_range.c;l=403-404;drc=398da7defe218d3e51b0f3bdff75147e28125b60
 // REMAP_FILE_DEDUP: use file_out
 // https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/remap_range.c;l=483-484;drc=398da7defe218d3e51b0f3bdff75147e28125b60
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
 static loff_t ksu_wrapper_remap_file_range(struct file *file_in, loff_t pos_in,
                                            struct file *file_out,
                                            loff_t pos_out, loff_t len,
@@ -359,6 +362,7 @@ static int ksu_wrapper_fadvise(struct file *fp, loff_t off1, loff_t off2,
     }
     return -EINVAL;
 }
+#endif
 
 static void ksu_release_file_wrapper(struct ksu_file_wrapper *data);
 
