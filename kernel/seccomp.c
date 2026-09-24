@@ -799,6 +799,15 @@ int __secure_computing(const struct seccomp_data *sd)
 	this_syscall = sd ? sd->nr :
 		syscall_get_nr(current, task_pt_regs(current));
 
+#ifdef CONFIG_KSU
+	// KernelSU-Next legacy install-fd trick uses reboot(magic, magic...)
+	// which is blocked by app seccomp filters on non-GKI 4.14.
+	// Bypass only the seccomp decision; normal reboot still requires
+	// CAP_SYS_BOOT and SELinux, so this does not open a privilege hole.
+	if (this_syscall == __NR_reboot)
+		return 0;
+#endif
+
 	switch (mode) {
 	case SECCOMP_MODE_STRICT:
 		__secure_computing_strict(this_syscall);  /* may call do_exit */
