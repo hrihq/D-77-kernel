@@ -80,6 +80,20 @@ jobs:
         "$GITHUB_WORKSPACE/clang/bin/clang" --version | head -n 1
         "$GITHUB_WORKSPACE/clang/bin/ld.lld" --version | head -n 1
 
+    - name: 🧹 Clean Source Tree
+      shell: bash
+      run: |
+        set -e
+        # prepare3 aborts the O= build if the source tree contains a stale
+        # .config or include/config directory. Diagnose and remove them.
+        echo "=== git status (porcelain) ==="
+        git status --porcelain | head -20 || true
+        echo "=== stale artifacts in srctree ==="
+        ls -la .config 2>/dev/null || echo "no .config in srctree"
+        ls -d include/config 2>/dev/null || echo "no include/config in srctree"
+        rm -f .config
+        rm -rf include/config
+
     - name: 📱 Patch Panel Dimensions
       shell: bash
       run: |
