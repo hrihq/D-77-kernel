@@ -52,8 +52,7 @@ static int ksu_handle_event(struct fsnotify_group *group,
         return 0;
     if (strlen((const char *)file_name) == 13 &&
         !memcmp(file_name, "packages.list", 13)) {
-        pr_info("packages.list detected: %d
-", mask);
+        pr_info("packages.list detected: %d\n", mask);
         track_throne(false);
     }
     return 0;
